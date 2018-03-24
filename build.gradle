@@ -1,0 +1,31 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'eclipse'
+}
+
+// Define the main class for the application
+mainClassName = 'io.hargrave.maven.artifacts.MavenCentralArtifactReport'
+
+dependencies {
+    compile 'biz.aQute.bnd:biz.aQute.bndlib:+'
+    compile 'biz.aQute.bnd:biz.aQute.repository:+'
+    runtime 'org.slf4j:slf4j-api:1.7.13'
+    runtime 'org.slf4j:slf4j-simple:1.7.13'
+    testCompile 'junit:junit:4.12'
+}
+
+repositories {
+    mavenCentral()
+    maven {
+      url 'https://bndtools.ci.cloudbees.com/job/bnd.master/lastSuccessfulBuild/artifact/dist/bundles'
+    }
+}
+
+run {
+  args 'c:%22module-info%22'
+}
+
+task wrapper(type: Wrapper) {
+  jarFile = rootProject.file('.gradle-wrapper/gradle-wrapper.jar')
+}
