@@ -6,6 +6,8 @@ import static java.util.stream.Collectors.toCollection;
 import static java.util.stream.Collectors.toList;
 
 import java.net.URL;
+import java.net.URLDecoder;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -19,7 +21,7 @@ import aQute.maven.api.Program;
 import aQute.maven.api.Revision;
 
 public class MavenCentralArtifactReport {
-	private static final String	queryUrl	= "https://search.maven.org/solrsearch/select?rows=%s&wt=json&q=%s";
+	private static final String	queryUrl	= "https://search.maven.org/solrsearch/select?rows=%s&start=%s&wt=json&q=%s";
 	private final HttpClient	client		= new HttpClient();
 
 	public static void main(String[] args) throws Exception {
@@ -31,36 +33,34 @@ public class MavenCentralArtifactReport {
 	}
 
 	void report(String query) throws Exception {
-		SearchResult result = query(query);
-
-		List<Revision> revisions = result.response.docsToRevisions();
+		List<Revision> revisions = query(query);
 		Map<Program, Set<MavenVersion>> programs = revisions.stream()
 			.collect(groupingBy(r -> r.program, TreeMap::new, mapping(r -> r.version, toCollection(TreeSet::new))));
 
-		System.out.printf("%s groupId:artifactId pairs found for query: %s%n%n", programs.size(),
-			result.responseHeader.params.get("q"));
+		System.out.printf("%n%s groupId:artifactId pairs found for query: %s%n%n", programs.size(),
+			URLDecoder.decode(query, "UTF-8"));
 		programs.forEach((p, v) -> System.out.printf(" %-50s %s%n", p, v));
 	}
 
-	SearchResult query(String query) throws Exception {
-		int n = 0;
+	List<Revision> query(String query) throws Exception {
+		List<Revision> revisions = null;
 		long rows = 100;
+		long start = 0;
 		while (true) {
-			URL url = new URL(String.format(queryUrl, rows, query));
-			try {
-				SearchResult result = client.build()
-					.headers("User-Agent", "Bnd")
-					.get(SearchResult.class)
-					.go(url);
-				if (result.response.numFound <= rows) {
-					return result;
-				}
-				rows = result.response.numFound;
-			} catch (Exception e) {
-				n++;
-				if (n > 3)
-					throw e;
-				Thread.sleep(1000 * n);
+			URL url = new URL(String.format(queryUrl, rows, start, query));
+			System.out.printf("Requesting %s...", url);
+			SearchResult result = client.build()
+				.headers("User-Agent", "Bnd")
+				.get(SearchResult.class)
+				.go(url);
+			if (revisions == null) {
+				revisions = new ArrayList<Revision>((int) result.response.numFound);
+			}
+			revisions.addAll(result.response.docsToRevisions());
+			start = result.response.start + result.response.docs.length;
+			System.out.printf(" found %s of %s%n", start, result.response.numFound);
+			if (start >= result.response.numFound) {
+				return revisions;
 			}
 		}
 	}
